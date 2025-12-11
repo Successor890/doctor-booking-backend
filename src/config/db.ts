@@ -1,9 +1,10 @@
 import { Pool } from "pg";
 
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL is NOT set");
+}
+
 export const pool = new Pool({
-  user: "postgres",
-  password: "Sanpost@2023",
-  host: "localhost",
-  port: 5432,
-  database: "postgres", // NOT doctor_booking
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
 });
