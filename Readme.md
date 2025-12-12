@@ -1,62 +1,216 @@
-# Doctor Booking API
+Doctor Booking Backend
+Node.js + Express + PostgreSQL backend for a doctor appointment booking system, inspired by platforms like RedBus/BookMyShow. It exposes REST APIs for admin and patient flows and handles concurrency to prevent overbooking.
 
-A RESTful backend for doctor appointment booking with **smart queue management**.
+Tech Stack
+Node.js, Express
 
-## Features
-- Browse doctors by city/specialization
-- View available time slots
-- Book appointments with queue position
-- **Smart queue insights**: `people_ahead` and `estimated_wait_minutes` computed from `queue_number`
-- Cancel bookings
-- Admin: manage doctor bookings by date
-- Patient: list my bookings by email
+TypeScript
 
-## Key Endpoints
+PostgreSQL (pg)
 
-### Public Patient Flow
-GET /api/doctors?city=Bangalore&specialization=Cardiologist
-GET /api/doctors/:doctorId/slots?date=2025-12-10
-POST /api/doctors/:doctorId/slots/:slotId/bookings
-GET /api/bookings/:bookingId <- NEW: full booking + doctor + slot + queue info
-GET /api/patients/bookings?email=... <- NEW: list all my bookings
-PATCH /api/bookings/:bookingId/cancel
-GET /api/doctors/:doctorId/queue-preview?date=...
+JWT for auth
 
-text
+Deployed on Render
 
-### Sample Responses
+Folder Structure (high level)
+src/
 
-**Single booking** (`GET /api/bookings/4`):
-{
-"booking": { "id": 4, "status": "PENDING", "queue_number": 2, "reason": "Checkup" },
-"doctor": { "id": 1, "name": "Dr. Test", "specialization": "Cardiologist" },
-"slot": { "id": 2, "start_time": "2025-12-10T10:00:00Z" },
-"people_ahead": 1,
-"estimated_wait_minutes": 10
-}
+index.ts – Express app bootstrap, routes, health checks
 
-text
+config/
 
-**List bookings** (`GET /api/patients/bookings?email=neha@example.com`):
-[ { "booking": {...}, "doctor": {...}, "slot": {...}, "people_ahead": 1, "estimated_wait_minutes": 10 } ]
+db.ts – PostgreSQL Pool + SSL config for production
 
-text
+routes/
 
-## Smart Queue Logic
-people_ahead = queue_number - 1
-estimated_wait_minutes = people_ahead × 10 (avg consultation = 10 mins)
+admin.ts – admin APIs (doctors, slots)
 
-text
+public.ts – public/patient APIs (doctors, slots, bookings, payments)
 
-## Tech Stack
-- Node.js + Express
-- PostgreSQL (joins: bookings → slots → doctors)
-- Postman collection included
+auth.ts – login and JWT
 
-## Quick Start
+middleware/ (if any)
+
+models/ or services/ (if you split logic)
+
+dist/ – compiled JavaScript (after npm run build)
+
+package.json
+
+tsconfig.json
+
+Installation (Local)
+bash
+git clone https://github.com/<your-username>/doctor-booking-backend.git
+cd doctor-booking-backend
 npm install
-npm run dev
+Environment Variables (Local)
+Create a .env file:
 
 text
+PORT=4000
+DATABASE_URL=postgres://postgres:<password>@localhost:5432/postgres
+JWT_SECRET=dc4b8f6c77f421cddf305f7e85a36912b97b1f6772f7db92be498a0c6282717e
+JWT_EXPIRES_IN=1d
+Adjust DATABASE_URL to match your local Postgres.
 
-**Postman Collection**: `Doctor-Booking-API.postman_collection.json`
+Running Locally
+bash
+npm run build
+npm run start
+The server will start on http://localhost:4000 (unless PORT is set).
+
+Health check:
+
+GET /health → returns JSON with status and DB connectivity.
+
+GET /debug/tables → lists DB tables (for debugging).
+
+Environment Variables (Production)
+On Render (or other host), configure:
+
+DATABASE_URL – managed Postgres URL from hosting provider.
+
+JWT_SECRET – same secret used in frontend for decoding tokens.
+
+JWT_EXPIRES_IN – e.g., 1d.
+
+NODE_ENV – production.
+
+src/config/db.ts uses:
+
+ts
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : false,
+});
+This enables SSL for Render’s Postgres.
+
+Scripts
+package.json:
+
+"build": "tsc" – compile TypeScript to dist/.
+
+"start": "node dist/index.js" – run compiled server.
+
+On Render:
+
+Build command: npm install && npm run build
+
+Start command: npm run start
+
+Core API Endpoints (Summary)
+Auth
+POST /api/auth/login
+
+Request: { email, password }
+
+Response: { token, user: { email, role } }
+
+Used by frontend to get JWT for admin/patient.
+
+Admin APIs
+All require Authorization: Bearer <token> with admin role.
+
+POST /api/admin/doctors
+
+Create doctor: name, specialization, city, consultation_type, consultation_fee, rating.
+
+GET /api/doctors
+
+Public list of doctors (also used by admin).
+
+POST /api/admin/doctors/:doctorId/slots
+
+Create a slot with start_time, end_time.
+
+DELETE /api/admin/doctors/:doctorId
+
+Delete doctor (and related slots/bookings).
+
+DELETE /api/admin/doctors/:doctorId/slots/:slotId
+
+Delete a specific slot.
+
+Public / Patient APIs
+GET /api/doctors
+
+List doctors.
+
+GET /api/doctors/:doctorId/slots
+
+List slots for doctor (with status).
+
+POST /api/doctors/:doctorId/slots/:slotId/bookings
+
+Create booking for a slot.
+
+Body: patient_name, patient_email, reason.
+
+Returns booking with status PENDING.
+
+POST /api/payments/fake
+
+Simulated payment.
+
+Body: { booking_id, success: true/false }.
+
+On success, sets booking status to CONFIRMED.
+
+PATCH /api/bookings/:id/cancel
+
+Cancel booking, update status.
+
+PATCH /api/bookings/:id/reschedule
+
+Body: { new_slot_id }
+
+Moves booking to another available slot atomically.
+
+GET /api/patients/bookings?email=...
+
+Returns bookings for a given patient email with doctor and slot details.
+
+Concurrency & Booking Expiry
+Booking operations use DB transactions and constraints to avoid overbooking.
+
+Only one active booking can be associated with a slot at a time.
+
+PENDING bookings auto‑expire after 2 minutes:
+
+Background logic/cron marks old PENDING bookings as FAILED.
+
+This frees slots if not confirmed in time.
+
+Deployment (Render) – Summary
+Create Render PostgreSQL instance → copy DATABASE_URL.
+
+Create Web Service from GitHub repo.
+
+Set environment variables (DATABASE_URL, JWT_SECRET, etc.).
+
+Use:
+
+Build: npm install && npm run build
+
+Start: npm run start
+
+Verify:
+
+GET https://<service>.onrender.com/health → status: "ok", db: "connected".
+
+Testing
+Use Postman or curl to test endpoints:
+
+Health: GET /health
+
+List doctors: GET /api/doctors
+
+Auth: POST /api/auth/login
+
+Booking: POST /api/doctors/:id/slots/:slotId/bookings
+
+Frontend uses this backend via VITE_API_BASE_URL.
