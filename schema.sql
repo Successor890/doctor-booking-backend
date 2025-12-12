@@ -2,6 +2,19 @@
 DROP TABLE IF EXISTS bookings;
 DROP TABLE IF EXISTS slots;
 DROP TABLE IF EXISTS doctors;
+DROP TABLE IF EXISTS users;
+
+-- Users: patients and admins
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  phone TEXT,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('PATIENT', 'ADMIN')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- Doctors: core for recommendation
 CREATE TABLE doctors (
@@ -30,17 +43,20 @@ CREATE TABLE slots (
 CREATE TABLE bookings (
   id SERIAL PRIMARY KEY,
   slot_id INTEGER NOT NULL REFERENCES slots(id) ON DELETE CASCADE,
+  patient_id INTEGER REFERENCES users(id),   -- link to users table
   patient_name VARCHAR(100) NOT NULL,
   patient_email VARCHAR(200) NOT NULL,
   reason TEXT,
-  status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING | CONFIRMED | FAILED | NO_SHOW
-  queue_number INTEGER,                           -- for real-time queue tracking
-  appointment_date DATE NOT NULL,                 -- extracted from slot start_time
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING | CONFIRMED | FAILED | NO_SHOW | CANCELLED
+  queue_number INTEGER,                         -- for real-time queue tracking
+  appointment_date DATE NOT NULL,               -- extracted from slot start_time
+  token_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  payment_status TEXT NOT NULL DEFAULT 'PENDING',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Helpful index for queue per doctor per day (we'll use this later)
+-- Helpful indexes
 CREATE INDEX idx_bookings_slot_id ON bookings(slot_id);
 CREATE INDEX idx_slots_doctor_start ON slots(doctor_id, start_time);
 CREATE INDEX idx_bookings_appointment_date ON bookings(appointment_date);
